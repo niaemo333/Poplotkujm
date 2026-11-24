@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poplotkujmy</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #fff0f6;
+      color: #352333;
+    }
+
+    header {
+      background: linear-gradient(120deg, #d63384, #8b5cf6);
+      color: white;
+      padding: 24px 16px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+    }
+
+    main {
+      width: min(700px, 92%);
+      margin: 24px auto;
+    }
+
+    section, .post {
+      background: white;
+      padding: 18px;
+      margin-bottom: 18px;
+      border-radius: 16px;
+      box-shadow: 0 4px 18px #6b214015;
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    input, textarea, select, button {
+      width: 100%;
+      margin: 7px 0;
+      padding: 11px;
+      border: 1px solid #e6c8d8;
+      border-radius: 9px;
+      font: inherit;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    button {
+      background: #d63384;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #b4236b;
+    }
+
+    button.secondary {
+      background: #eee4f4;
+      color: #512b55;
+    }
+
+    button.danger {
+      background: #a83232;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .button-row button {
+      width: auto;
+      flex: 1;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .muted {
+      color: #806d7b;
+      font-size: 0.9rem;
+    }
+
+    .post-text {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .comment {
+      background: #fff5fa;
+      border-radius: 9px;
+      padding: 10px;
+      margin: 8px 0;
+    }
+
+    .comment p {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .comment-form {
+      margin-top: 12px;
+    }
+
+    #status {
+      min-height: 1.2em;
+      color: #7b2456;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Poplotkujmy 💬</h1>
+    <p>Miejsce na rozmowy, wpisy i miłe ploteczki</p>
+  </header>
+
+  <main>
+    <section id="authSection">
+      <h2>Konto</h2>
+
+      <input id="email" type="email" placeholder="Adres e-mail" autocomplete="email">
+      <input id="password" type="password" placeholder="Hasło" autocomplete="current-password">
+
+      <div class="button-row">
+        <button id="registerBtn" type="button">Zarejestruj się</button>
+        <button id="loginBtn" type="button">Zaloguj się</button>
+      </div>
+
+      <button id="resetPasswordBtn" class="secondary" type="button">
+        Nie pamiętasz hasła?
+      </button>
+
+      <p id="authStatus" class="muted" aria-live="polite"></p>
+    </section>
+
+    <section id="userSection" class="hidden">
+      <p id="userLabel"></p>
+      <button id="logoutBtn" class="secondary" type="button">Wyloguj się</button>
+    </section>
+
+    <section id="newPostSection" class="hidden">
+      <h2>Dodaj wpis</h2>
+
+      <select id="postCategory">
+        <option value="Codzienne życie">Codzienne życie</option>
+        <option value="Szkoła">Szkoła</option>
+        <option value="Przyjaźń">Przyjaźń</option>
+        <option value="Inne">Inne</option>
+      </select>
+
+      <textarea id="postText" maxlength="1000" placeholder="Co u Ciebie?"></textarea>
+      <button id="addPostBtn" type="button">Opublikuj wpis</button>
+    </section>
+
+    <section>
+      <h2>Ostatnie wpisy</h2>
+      <p id="feedStatus" class="muted" aria-live="polite">Ładowanie wpisów…</p>
+      <div id="posts"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+
+    import {
+      getAuth,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      signOut,
+      onAuthStateChanged,
+      sendPasswordResetEmail
+    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      onSnapshot,
+      query,
+      orderBy,
+      serverTimestamp,
+      updateDoc,
+      arrayUnion,
+      arrayRemove,
+      deleteDoc,
+      doc
+    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+    // Wstaw tutaj konfigurację swojego projektu Firebase.
+    const firebaseConfig = {
+  apiKey : "AIzaSyAliIiInRapqcZzz05I12SjXJKQ4TVggfo" , 
+  authDomain : "poplotkujmy-812cd.firebaseapp.com" , 
+  projectId : "poplotkujmy-812cd" , 
+  storageBucket : "poplotkujmy-812cd.firebasestorage.app" , 
+  messagingSenderId : "888174280353" , 
+  appId : "1:888174280353:web:288239f64c13b2ec0a3ae0" , 
+  measurementId : "G-9ED0P6YT5H" 
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const postsElement = document.getElementById("posts");
+    const feedStatus = document.getElementById("feedStatus");
+    const authStatus = document.getElementById("authStatus");
+
+    let currentUser = null;
+    let postsCache = [];
+
+    // Zabezpiecza tekst użytkownika przed wstawieniem go jako HTML.
+    function escapeHTML(value = "") {
+      return String(value).replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[character]));
+    }
+
+    function showAuthMessage(message) {
+      authStatus.textContent = message;
+    }
+
+    // Rejestracja
+    document.getElementById("registerBtn").addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      if (!email || !password) {
+        showAuthMessage("Wpisz adres e-mail i hasło.");
+        return;
+      }
+
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        showAuthMessage("Konto zostało utworzone.");
+      } catch (error) {
+        showAuthMessage("Nie udało się utworzyć konta. Sprawdź dane i spróbuj ponownie.");
+        console.error(error);
+      }
+    });
+
+    // Logowanie
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      if (!email || !password) {
+        showAuthMessage("Wpisz adres e-mail i hasło.");
+        return;
+      }
+
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        showAuthMessage("Zalogowano.");
+      } catch (error) {
+        showAuthMessage("Logowanie nie powiodło się. Sprawdź e-mail i hasło.");
+        console.error(error);
+      }
+    });
+
+    // Odzyskiwanie hasła
+    document.getElementById("resetPasswordBtn").addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+
+      if (!email) {
+        showAuthMessage("Najpierw wpisz swój adres e-mail.");
+        return;
+      }
+
+      try {
+        await sendPasswordResetEmail(auth, email);
+        showAuthMessage("Jeśli konto istnieje, otrzymasz wiadomość z linkiem do zmiany hasła.");
+      } catch (error) {
+        showAuthMessage("Nie udało się wysłać wiadomości. Sprawdź adres e-mail i spróbuj ponownie.");
+        console.error(error);
+      }
+    });
+
+    // Wylogowanie
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        showAuthMessage("Nie udało się wylogować.");
+        console.error(error);
+      }
+    });
+
+    // Zmiana widoku po zalogowaniu lub wylogowaniu
+    onAuthStateChanged(auth, user => {
+      currentUser = user;
+
+      document.getElementById("authSection").classList.toggle("hidden", Boolean(user));
+      document.getElementById("userSection").classList.toggle("hidden", !user);
+      document.getElementById("newPostSection").classList.toggle("hidden", !user);
+
+      document.getElementById("userLabel").textContent =
+        user ? `Zalogowano jako: ${user.email}` : "";
+
+      renderPosts();
+    });
+
+    // Dodawanie wpisu
+    document.getElementById("addPostBtn").addEventListener("click", async () => {
+      if (!currentUser) {
+        alert("Zaloguj się, aby dodać wpis.");
+        return;
+      }
+
+      const text = document.getElementById("postText").value.trim();
+      const category = document.getElementById("postCategory").value;
+
+      if (!text) {
+        alert("Wpisz treść wiadomości.");
+        return;
+      }
+
+      try {
+        await addDoc(collection(db, "posts"), {
+          text,
+          category,
+          author: currentUser.uid,
+          createdAt: serverTimestamp(),
+          likes: [],
+          comments: []
+        });
+
+        document.getElementById("postText").value = "";
+      } catch (error) {
+        alert("Nie udało się opublikować wpisu.");
+        console.error(error);
+      }
+    });
+
+    // Pobieranie wpisów na bieżąco
+    const postsQuery = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+
+    onSnapshot(postsQuery, snapshot => {
+      postsCache = snapshot.docs.map(snapshotDoc => ({
+        id: snapshotDoc.id,
+        ...snapshotDoc.data()
+      }));
+
+      feedStatus.textContent = postsCache.length ? "" : "Nie ma jeszcze wpisów.";
+      renderPosts();
+    }, error => {
+      feedStatus.textContent = "Nie udało się pobrać wpisów.";
+      console.error(error);
+    });
+
+    // Tworzenie widoku wpisów i komentarzy
+    function renderPosts() {
+      postsElement.replaceChildren();
+
+      for (const post of postsCache) {
+        const likes = Array.isArray(post.likes) ? post.likes : [];
+        const comments = Array.isArray(post.comments) ? post.comments : [];
+        const likedByMe = currentUser && likes.includes(currentUser.uid);
+
+        const postElement = document.createElement("article");
+        postElement.className = "post";
+
+        postElement.innerHTML = `
+          <p class="muted">${escapeHTML(post.category || "Inne")}</p>
+          <p class="post-text">${escapeHTML(post.text || "")}</p>
+
+          <div class="button-row">
+            <button type="button" data-action="like">
+              ${likedByMe ? "💗" : "🤍"} ${likes.length}
+            </button>
+
+            ${currentUser && currentUser.uid === post.author
+              ? `<button type="button" class="danger" data-action="delete-post">Usuń wpis</button>`
+              : ""}
+          </div>
+
+          <h3>Komentarze (${comments.length})</h3>
+          <div class="comments"></div>
+
+          ${currentUser
+            ? `<div class="comment-form">
+                 <textarea maxlength="500" placeholder="Dodaj komentarz…"></textarea>
+                 <button type="button" data-action="add-comment">Dodaj komentarz</button>
+               </div>`
+            : `<p class="muted">Zaloguj się, aby dodać komentarz.</p>`}
+        `;
+
+        const commentsElement = postElement.querySelector(".comments");
+
+        for (const comment of comments) {
+          const commentElement = document.createElement("div");
+          commentElement.className = "comment";
+
+          commentElement.innerHTML = `
+            <p>${escapeHTML(comment.text || "")}</p>
+            ${currentUser && currentUser.uid === comment.author
+              ? `<button type="button" class="danger" data-action="delete-comment">Usuń komentarz</button>`
+              : ""}
+          `;
+
+          const deleteCommentButton = commentElement.querySelector('[data-action="delete-comment"]');
+          if (deleteCommentButton) {
+            deleteCommentButton.addEventListener("click", () => {
+              deleteOwnComment(post.id, comment.id, comment.author);
+            });
+          }
+
+          commentsElement.appendChild(commentElement);
+        }
+
+        postElement.querySelector('[data-action="like"]').addEventListener("click", () => {
+          toggleLike(post);
+        });
+
+        const deletePostButton = postElement.querySelector('[data-action="delete-post"]');
+        if (deletePostButton) {
+          deletePostButton.addEventListener("click", () => {
+            deleteOwnPost(post.id, post.author);
+          });
+        }
+
+        const addCommentButton = postElement.querySelector('[data-action="add-comment"]');
+        if (addCommentButton) {
+          addCommentButton.addEventListener("click", () => {
+            const commentText = postElement.querySelector(".comment-form textarea").value.trim();
+            addComment(post.id, commentText);
+          });
+        }
+
+        postsElement.appendChild(postElement);
+      }
+    }
+
+    // Polubienie lub cofnięcie polubienia
+    async function toggleLike(post) {
+      if (!currentUser) {
+        alert("Zaloguj się, aby polubić wpis.");
+        return;
+      }
+
+      const postRef = doc(db, "posts", post.id);
+      const likes = Array.isArray(post.likes) ? post.likes : [];
+
+      try {
+        if (likes.includes(currentUser.uid)) {
+          await updateDoc(postRef, {
+            likes: arrayRemove(currentUser.uid)
+          });
+        } else {
+          await updateDoc(postRef, {
+            likes: arrayUnion(currentUser.uid)
+          });
+        }
+      } catch (error) {
+        alert("Nie udało się zmienić polubienia.");
+        console.error(error);
+      }
+    }
+
+    // Dodawanie komentarza
+    async function addComment(postId, text) {
+      if (!currentUser) {
+        alert("Zaloguj się, aby dodać komentarz.");
+        return;
+      }
+
+      if (!text) {
+        alert("Wpisz treść komentarza.");
+        return;
+      }
+
+      const comment = {
+        id: crypto.randomUUID(),
+        text,
+        author: currentUser.uid,
+        createdAt: Date.now()
+      };
+
+      try {
+        await updateDoc(doc(db, "posts", postId), {
+          comments: arrayUnion(comment)
+        });
+      } catch (error) {
+        alert("Nie udało się dodać komentarza.");
+        console.error(error);
+      }
+    }
+
+    // Usuwanie własnego wpisu
+    async function deleteOwnPost(postId, postAuthorId) {
+      if (!currentUser || currentUser.uid !== postAuthorId) {
+        alert("Możesz usuwać tylko własne wpisy.");
+        return;
+      }
+
+      if (!confirm("Czy na pewno chcesz usunąć ten wpis?")) return;
+
+      try {
+        await deleteDoc(doc(db, "posts", postId));
+      } catch (error) {
+        alert("Nie udało się usunąć wpisu.");
+        console.error(error);
+      }
+    }
+
+    // Usuwanie własnego komentarza
+    async function deleteOwnComment(postId, commentId, commentAuthorId) {
+      if (!currentUser || currentUser.uid !== commentAuthorId) {
+        alert("Możesz usuwać tylko własne komentarze.");
+        return;
+      }
+
+      const post = postsCache.find(item => item.id === postId);
+      if (!post) return;
+
+      const comments = Array.isArray(post.comments) ? post.comments : [];
+      const commentToDelete = comments.find(comment => comment.id === commentId);
+
+      if (!commentToDelete || commentToDelete.author !== currentUser.uid) {
+        alert("Nie znaleziono Twojego komentarza.");
+        return;
+      }
+
+      if (!confirm("Czy na pewno chcesz usunąć ten komentarz?")) return;
+
+      const updatedComments = comments.filter(comment => comment.id !== commentId);
+
+      try {
+        await updateDoc(doc(db, "posts", postId), {
+          comments: updatedComments
+        });
+      } catch (error) {
+        alert("Nie udało się usunąć komentarza.");
+        console.error(error);
+      }
+    }
+  </script>
+</body>
+</html>
